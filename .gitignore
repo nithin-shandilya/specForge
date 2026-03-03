@@ -1,6 +1,40 @@
-.encore
+# Dependencies
+node_modules/
+
+# Encore
+.encore/
+encore.gen/
 encore.gen.go
 encore.gen.cue
-/.encore
-node_modules
-/encore.gen
+
+# Environment & Secrets
+.env
+.env.*
+*.pem
+*.key
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Build
+dist/
+build/
+
+# Logs
+*.log
+
+# Test
+coverage/
+
+#AI 
+.claude/
+.cursor/
+
+#typescript build
+tsconfig.tsbuildinfo
