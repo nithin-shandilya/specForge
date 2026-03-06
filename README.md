@@ -1,6 +1,6 @@
 # SpecForge Backend
 
-Multi-tenant backend for database connection management with Cognito auth, org-scoped RBAC, schema discovery, and job tracking.
+SpecForge Backend Logic for text to sql.
 
 ---
 

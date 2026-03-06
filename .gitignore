@@ -38,3 +38,5 @@ coverage/
 
 #typescript build
 tsconfig.tsbuildinfo
+/.encore
+/encore.gen

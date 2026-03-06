@@ -11,6 +11,7 @@ import { Client } from "pg";
 
 import { ddb } from "../../pkg/aws/clients";
 import { DynamoTableName } from "../../health/secrets";
+import { storeSecret, getSecret } from "../../pkg/aws/secrets";
 
 /**
  * CREATE CONNECTION
@@ -24,6 +25,12 @@ export async function createConnection(
   const now = new Date().toISOString();
   const connectionId = randomUUID();
 
+  // Store credentials in Secrets Manager
+  const arn = await storeSecret(orgId, connectionId, {
+    username: endpoint.username,
+    password: endpoint.password,
+  });
+
   const item: Connection = {
     PK: `ORG#${orgId}`,
     SK: `CONN#${connectionId}`,
@@ -34,9 +41,14 @@ export async function createConnection(
     connectionId,
     name,
     provider,
-    endpoint,
+    endpoint: {
+      host: endpoint.host,
+      port: endpoint.port,
+      database: endpoint.database || null,
+      ssl: endpoint.ssl || null,
+    },
     status: "CREATED",
-    secretArn: `conn/${orgId}/${connectionId}`,
+    secretArn: arn,
 
     createdAt: now,
     updatedAt: now,
@@ -159,9 +171,13 @@ export async function discoverSchema(orgId: string, connectionId: string) {
   const conn = await getConnection(orgId, connectionId);
   if (!conn) throw new Error("Connection not found");
 
-  const { host, port, database, username, password } = conn.endpoint;
+  const { host, port, database } = conn.endpoint;
 
-  // 2. Create Postgres client with proper credentials
+  // 2. Fetch credentials from Secrets Manager
+  const creds = await getSecret(conn.secretArn);
+  const { username, password } = creds;
+
+  // 3. Create Postgres client
   const client = new Client({
     host,
     port,
@@ -170,10 +186,10 @@ export async function discoverSchema(orgId: string, connectionId: string) {
     database: database || "postgres",
   });
 
-  // 3. Connect
+  // 4. Connect
   await client.connect();
 
-  // 4. Fetch tables
+  // 5. Fetch tables
   const res = await client.query(`
     SELECT table_schema, table_name
     FROM information_schema.tables
@@ -181,10 +197,10 @@ export async function discoverSchema(orgId: string, connectionId: string) {
     ORDER BY table_schema, table_name
   `);
 
-  // 5. Close
+  // 6. Close
   await client.end();
 
-  // 6. Group by schema
+  // 7. Group by schema
   const grouped: Record<string, { tableName: string }[]> = {};
   for (const row of res.rows) {
     if (!grouped[row.table_schema]) {
@@ -193,14 +209,14 @@ export async function discoverSchema(orgId: string, connectionId: string) {
     grouped[row.table_schema].push({ tableName: row.table_name });
   }
 
-  // 7. Format result
+  // 8. Format result
   const discoveredAt = new Date().toISOString();
   const schemas = Object.keys(grouped).map((schema) => ({
     schemaName: schema,
     tables: grouped[schema],
   }));
 
-  // 8. Store discovery result in DynamoDB
+  // 9. Store discovery result in DynamoDB
   await ddb.send(
     new PutCommand({
       TableName: DynamoTableName(),
@@ -217,7 +233,7 @@ export async function discoverSchema(orgId: string, connectionId: string) {
     })
   );
 
-  // 9. Update connection status to READY
+  // 10. Update connection status to READY
   await updateConnectionStatus(orgId, connectionId, "READY", null);
 
   return {

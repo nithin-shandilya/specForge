@@ -5,9 +5,11 @@ import {
   InitiateAuthCommand,
   AuthFlowType,
   ChangePasswordCommand,
+  AdminAddUserToGroupCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
 import { Header } from "encore.dev/api";
 import { cognitoClient, calculateSecretHash, getClientId } from "./aws/client";
+import { CognitoUserPoolId } from "../../health/secrets";
 import { getUserByEmail, toPublicUser, type CognitoUserPublic } from "./cognito-db";
 import { getAuthData } from "~encore/auth";
 import { getUserById } from "./cognito-db";
@@ -66,6 +68,15 @@ export const register = api(
       });
 
       const response = await cognitoClient.send(command);
+
+      // Auto-assign to 'user' group
+      await cognitoClient.send(
+        new AdminAddUserToGroupCommand({
+          UserPoolId: CognitoUserPoolId(),
+          Username: req.email,
+          GroupName: "user",
+        })
+      );
 
       return {
         user: {

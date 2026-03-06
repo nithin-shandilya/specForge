@@ -13,6 +13,7 @@ import {
 } from "./db";
 import { createJob, updateJobStatus, listJobs, getJob } from "./jobs";
 import { authorizeOrg } from "../org/auth_utils";
+import { getSecret } from "../../pkg/aws/secrets";
 
 /**
  * TYPES
@@ -45,7 +46,7 @@ interface ConnectionParams {
  */
 function sanitize(connection: any) {
   const { secretArn, ...rest } = connection;
-  const { password, ...safeEndpoint } = rest.endpoint ?? {};
+  const { password, username, ...safeEndpoint } = rest.endpoint ?? {};
   return { ...rest, endpoint: safeEndpoint };
 }
 
@@ -152,7 +153,11 @@ export const validate = api(
       const conn = await getConnection(orgId, connectionId);
       if (!conn) throw new Error("Connection not found");
 
-      const { host, port, database, username, password } = conn.endpoint;
+      const { host, port, database } = conn.endpoint;
+
+      // Fetch credentials from Secrets Manager
+      const creds = await getSecret(conn.secretArn);
+      const { username, password } = creds;
 
       const { Client } = await import("pg");
       const client = new Client({
